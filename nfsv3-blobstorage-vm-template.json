@@ -1,0 +1,232 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "prefix": {
+      "type": "string"
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_DS2_v2"
+    },
+    "adminUserName": {
+      "type": "string",
+      "defaultValue": "azureuser"
+    },
+    "adminPassword": {
+      "type": "securestring"
+    }
+  },
+  "variables": {
+    "location": "[resourceGroup().location]",
+    "storageAccountName": "[concat(parameters('prefix'), uniqueString(resourceGroup().id))]",
+    "numClientVms": 1,
+    "externalNsgName": "[concat(parameters('prefix'), '-external-nsg')]",
+    "vnetName": "[concat(parameters('prefix'), '-vnet')]",
+    "vnetAddressSpace": "10.100.0.0/16",
+    "clientSubnetName": "client-subnet",
+    "clientSubnetAddressSpace": "10.100.3.0/24",
+    "clientSubnetResourceId": "[concat(resourceId('Microsoft.Network/virtualNetworks/', variables('vnetName')), '/subnets/', variables('clientSubnetName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2020-04-01",
+      "name": "[concat(parameters('prefix'), '-pip', copyIndex())]",
+      "location": "[variables('location')]",
+      "copy": {
+        "name": "natPublicIpCopy",
+        "count": "[variables('numClientVms')]"
+      },
+      "sku": {
+        "name": "Basic"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[concat(parameters('prefix'), '-', copyIndex(), '-', uniqueString(resourceGroup().id))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2020-04-01",
+      "name": "[variables('externalNsgName')]",
+      "location": "[variables('location')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "Allow_SSH",
+            "properties": {
+              "direction": "Inbound",
+              "priority": 100,
+              "access": "Allow",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "22",
+              "protocol": "Tcp"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2020-04-01",
+      "name": "[variables('vnetName')]",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[concat('Microsoft.Network/networkSecurityGroups/', variables('externalNsgName'))]"
+      ],
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('vnetAddressSpace')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('clientSubnetName')]",
+            "properties": {
+              "addressPrefix": "[variables('clientSubnetAddressSpace')]",
+              "privateEndpointNetworkPolicies": "Enabled",
+              "privateLinkServiceNetworkPolicies": "Enabled",
+              "serviceEndpoints": [
+                {
+                  "service": "Microsoft.Storage"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2019-06-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'))]"
+      ],
+      "kind": "BlockBlobStorage",
+      "sku": {
+        "name": "Premium_LRS",
+        "tier": "Premium"
+      },
+      "properties": {
+        "supportsHttpsTrafficOnly": false,
+        "isHnsEnabled": true,
+        "isNfsV3Enabled": true,
+        "networkAcls": {
+          "defaultAction": "Deny",
+          "virtualNetworkRules": [
+            {
+              "id": "[variables('clientSubnetResourceId')]"
+            }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "type": "blobServices/containers",
+          "apiVersion": "2019-06-01",
+          "name": "[concat('default/container1')]",
+          "dependsOn": [
+            "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]"
+          ],
+          "properties": {
+            "publicAccess": "None"
+          }
+        }
+      ]
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2020-04-01",
+      "name": "[concat(parameters('prefix'), '-client-nic', copyIndex())]",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'))]",
+        "[concat('Microsoft.Network/publicIPAddresses/', concat(parameters('prefix'), '-pip', copyIndex()))]"
+      ],
+      "copy": {
+        "name": "clientNicCopy",
+        "count": "[variables('numClientVms')]"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "primary",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('clientSubnetResourceId')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('prefix'), '-pip', copyIndex()))]"
+              }
+            }
+          }
+        ],
+        "enableAcceleratedNetworking": true
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2019-07-01",
+      "name": "[concat(parameters('prefix'), '-client-vm', copyIndex())]",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[concat('Microsoft.Network/networkInterfaces/', concat(parameters('prefix'), '-client-nic', copyIndex()))]"
+      ],
+      "copy": {
+        "name": "clientVmCopy",
+        "count": "[variables('numClientVms')]"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "Canonical",
+            "offer": "UbuntuServer",
+            "sku": "18.04-LTS",
+            "version": "latest"
+          },
+          "osDisk": {
+            "osType": "Linux",
+            "name": "[concat(parameters('prefix'), '-client-vm', copyIndex())]",
+            "createOption": "FromImage",
+            "caching": "ReadWrite",
+            "managedDisk": {
+              "storageAccountType": "StandardSSD_LRS"
+            }
+          },
+          "dataDisks": [
+          ]
+        },
+        "osProfile": {
+          "computerName": "[concat(parameters('prefix'), '-client-vm', copyIndex())]",
+          "adminUsername": "[parameters('adminUserName')]",
+          "adminPassword": "[parameters('adminPassword')]",
+          "linuxConfiguration": {
+            "disablePasswordAuthentication": false
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('prefix'), '-client-nic', copyIndex()))]",
+              "properties": {
+                "primary": true
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
