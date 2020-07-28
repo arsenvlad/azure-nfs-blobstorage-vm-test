@@ -45,7 +45,7 @@ sudo apt-get install -y nfs-common
 
 sudo mkdir -p /mnt/test
 
-sudo mount -o sec=sys,vers=3,nolock,proto=tcp avnfsv3ve4jktl4em35k.blob.core.windows.net:/avnfsv3ve4jktl4em35k/container1  /mnt/test
+sudo mount -o sec=sys,vers=3,nolock,proto=tcp <storageaccountname>.blob.core.windows.net:/<storageaccountname>/container1  /mnt/test
 ```
 
 ## Test
@@ -59,7 +59,7 @@ sudo apt-get install -y fio dstat
 dstat -tam -N eth0
 ```
 
-dd sequential write of 10GB file
+### dd sequential write of 10GB file
 
 ```bash
 dd if=/dev/zero of=/mnt/test/10GB.dat bs=1024000 count=10240
@@ -68,9 +68,10 @@ dd if=/dev/zero of=/mnt/test/10GB.dat bs=1024000 count=10240
 ![10GB write](./images/dd-10gb-write.png)
 
 dstat output showing per/sec network usage on eth0
+
 ![10GB write dstat](./images/dd-10gb-write-dstat.png)
 
-dd sequential read of 10GB file
+### dd sequential read of 10GB file
 
 ```bash
 dd if=/mnt/test/10GB.dat of=/dev/null bs=1024000 count=10240
@@ -78,10 +79,11 @@ dd if=/mnt/test/10GB.dat of=/dev/null bs=1024000 count=10240
 
 ![10GB read](./images/dd-10gb-read.png)
 
-dstat output showing per/sec network usage on eth0
+dstat output showing MB/sec network usage on eth0
+
 ![10GB read dstat](./images/dd-10gb-read-dstat.png)
 
-cp of 10GB file
+### Copy of 10GB file
 
 ```bash
 time cp /mnt/test/10GB.dat /mnt/test/10GB_copy.dat
@@ -89,10 +91,11 @@ time cp /mnt/test/10GB.dat /mnt/test/10GB_copy.dat
 
 ![10GB cp](./images/cp-10gb.png)
 
-dstat output showing per/sec network usage on eth0
+dstat output showing MB/sec network usage on eth0
+
 ![10GB cp dstat](./images/cp-10gb-dstat.png)
 
-FIO read throughput using 1MB blocks and queue depth of 64
+### FIO read throughput using 1MB blocks and queue depth of 64
 
 ```bash
 fio --directory=/mnt/test --name=tempfile.dat --direct=1 --ioengine=libaio --iodepth=64 --rw=read --bs=1024k --size=4G --numjobs=1 --time_based --runtime=10 --group_reporting
@@ -100,7 +103,7 @@ fio --directory=/mnt/test --name=tempfile.dat --direct=1 --ioengine=libaio --iod
 
 ![fio read throughput](./images/fio-read-throughput.png)
 
-FIO write throughput using 1MB blocks and queue depth of 64
+### FIO write throughput using 1MB blocks and queue depth of 64
 
 ```bash
 fio --directory=/mnt/test --name=tempfile.dat --direct=1 --ioengine=libaio --iodepth=64 --rw=write --bs=1024k --size=4G --numjobs=1 --time_based --runtime=10 --group_reporting
@@ -108,7 +111,7 @@ fio --directory=/mnt/test --name=tempfile.dat --direct=1 --ioengine=libaio --iod
 
 ![fio write throughput](./images/fio-write-throughput.png)
 
-FIO read IOPS using 4KB blocks and 8 parallel jobs
+### FIO read IOPS using 4KB blocks and 8 parallel jobs
 
 ```bash
 fio --directory=/mnt/test --name=tempfile.dat --direct=1 --ioengine=libaio --iodepth=64 --rw=read --bs=4k --size=4G --numjobs=8 --time_based --runtime=10 --group_reporting
@@ -116,11 +119,10 @@ fio --directory=/mnt/test --name=tempfile.dat --direct=1 --ioengine=libaio --iod
 
 ![fio read iops](./images/fio-read-iops.png)
 
-FIO write IOPS using 4KB blocks and 8 parallel jobs
+### FIO write IOPS using 4KB blocks and 8 parallel jobs
 
 ```bash
 fio --directory=/mnt/test --name=tempfile.dat --direct=1 --ioengine=libaio --iodepth=64 --rw=write --bs=4k --size=4G --numjobs=8 --time_based --runtime=10 --group_reporting
 ```
 
 ![fio write iops](./images/fio-write-throughput.png)
-
